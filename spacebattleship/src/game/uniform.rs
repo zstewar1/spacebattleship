@@ -8,11 +8,11 @@ use std::{
 };
 
 use crate::{
-    board::{Board, BoardSetup, Dimensions},
+    board::{Board, BoardSetup, Dimensions, ShotResult as BoardShotResult},
     ships::{ShipId, ShipShape},
 };
 
-pub use self::errors::AddPlayerError;
+pub use self::errors::{AddPlayerError, CannotShootReason, ShotError};
 
 mod errors;
 
@@ -107,6 +107,57 @@ impl<P: PlayerId, I: ShipId, D: Dimensions, S: ShipShape<D>> Default for GameSet
     }
 }
 
+/// Result of a shot on a single player's board.
+pub enum ShotResult<I> {
+    /// The shot did not hit anything.
+    Miss,
+    /// The shot hit the ship with the given ID, but did not sink it.
+    Hit(I),
+    /// The shot hit the ship with the given ID, but the player has more ships left.
+    Sunk(I),
+    /// The shot hit the ship with the given ID, and all of the player's ships are now
+    /// sunk. However, there are additonal players left who still have ships.
+    Defeated(I),
+    /// The shot hit the ship with the given ID and all players but the current player are
+    /// now defeated. The current player is the winner.
+    Victory(I),
+}
+
+impl<I> ShotResult<I> {
+    /// Get the id of the ship that was hit.
+    pub fn ship(&self) -> Option<&I> {
+        match self {
+            ShotResult::Miss => None,
+            ShotResult::Hit(ref id)
+            | ShotResult::Sunk(ref id)
+            | ShotResult::Defeated(ref id)
+            | ShotResult::Victory(ref id) => Some(id),
+        }
+    }
+
+    /// Extract the id of the ship that was hit from this result.
+    pub fn into_ship(self) -> Option<I> {
+        match self {
+            ShotResult::Miss => None,
+            ShotResult::Hit(id)
+            | ShotResult::Sunk(id)
+            | ShotResult::Defeated(id) 
+            | ShotResult::Victory(id) => Some(id),
+        }
+    }
+}
+
+impl<I> From<BoardShotResult<I>> for ShotResult<I> {
+    fn from(shot: BoardShotResult<I>) -> Self {
+        match shot {
+            BoardShotResult::Miss => ShotResult::Miss,
+            BoardShotResult::Hit(id) => ShotResult::Hit(id),
+            BoardShotResult::Sunk(id) => ShotResult::Sunk(id),
+            BoardShotResult::Defeated(id) => ShotResult::Defeated(id),
+        }
+    }
+}
+
 /// Handles gameplay.
 pub struct Game<P: PlayerId, I: ShipId, D: Dimensions> {
     /// Gameplay boards for the players.
@@ -117,4 +168,55 @@ pub struct Game<P: PlayerId, I: ShipId, D: Dimensions> {
 
     /// Counter for the current player turn as an index in `turn_order`.
     current: usize,
+}
+
+impl<P: PlayerId, I: ShipId, D: Dimensions> Game<P, I, D> {
+    /// Get the ID of the player whose turn it is.
+    pub fn current(&self) -> &P {
+        &self.turn_order[self.current]
+    }
+
+    /// Get the status of the game. Returns `None` if the game is in progress, otherwise
+    /// returns the winner.
+    pub fn winner(&self) -> Option<&P> {
+        let remaining = self.boards.values().filter(|board| !board.defeated()).count();
+        debug_assert!(remaining > 0);
+        if remaining == 1 {
+            Some(self.current())
+        } else {
+            None
+        }
+    }
+
+    /// Get a reference to the board for the specified player.
+    pub fn get_board<Q: ?Sized>(&self, pid: &Q) -> Option<&Board<I, D>> 
+    where
+    P: Borrow<Q>,
+    Q: Eq + Hash,
+    {
+        self.boards.get(pid)
+    }
+
+    /// Iterate the player ids and boards in turn-order.
+    pub fn iter_boards(&self) -> impl Iterator<Item=(&P, &Board<I, D>)> {
+        self.turn_order.iter().map(move |pid| (pid, &self.boards[pid]))
+    }
+
+    /// Fire a shot at the specified player, returning the result of the shot or
+    /// an error if the shot was invalid.
+    pub fn shoot(&mut self, target: P, coord: D::Coordinate) -> Result<ShotResult<I>, ShotError<P, D::Coordinate>> {
+        if self.winner().is_some() {
+            Err(ShotError::new(CannotShootReason::AlreadyOver, target, coord))
+        } else if self.current() == &target {
+            Err(ShotError::new(CannotShootReason::SelfShot, target, coord))
+        } else if let Some(board) = self.boards.get_mut(&target) {
+            match board.shoot(coord) {
+                Ok(BoardShotResult::Defeated(id)) if self.winner().is_some() => Ok(ShotResult::Victory(id)),
+                Ok(res) => Ok(res.into()),
+                Err(err) => Err(ShotError::add_context(err, target)),
+            }
+        } else {
+            Err(ShotError::new(CannotShootReason::UnknownPlayer, target, coord))
+        }
+    }
 }
