@@ -99,7 +99,11 @@ pub struct ShotError<P: Debug, C: Debug> {
 impl<P: Debug, C: Debug> ShotError<P, C> {
     /// Create a [`ShotError`] from a reason, player and coordinate.
     pub(super) fn new(reason: CannotShootReason, player: P, coord: C) -> Self {
-        Self {reason, player, coord}
+        Self {
+            reason,
+            player,
+            coord,
+        }
     }
 
     /// Create a [`ShotError`] by adding a player ID as context to a [`BoardShotError`].

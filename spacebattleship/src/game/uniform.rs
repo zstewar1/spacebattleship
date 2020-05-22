@@ -16,8 +16,11 @@ pub use self::errors::{AddPlayerError, CannotShootReason, ShotError};
 
 mod errors;
 
-/// Types used for the ID of a player. Ids may be cloned arbitrarily so they should be
-/// cheap to clone.
+/// Types used for the ID of a player. IDs are treated as disposable and cheaply
+/// cloneable. If you need a complex ID type that isn't cheap to clone, you may want to
+/// wrap it in `Rc` or `Arc`.
+///
+/// Auto-implemented for any type which implements `Debug`,`Clone`, `Eq`, and `Hash`.
 pub trait PlayerId: Debug + Clone + Eq + Hash {}
 impl<T: Debug + Clone + Eq + Hash> PlayerId for T {}
 
@@ -141,7 +144,7 @@ impl<I> ShotResult<I> {
             ShotResult::Miss => None,
             ShotResult::Hit(id)
             | ShotResult::Sunk(id)
-            | ShotResult::Defeated(id) 
+            | ShotResult::Defeated(id)
             | ShotResult::Victory(id) => Some(id),
         }
     }
@@ -179,7 +182,11 @@ impl<P: PlayerId, I: ShipId, D: Dimensions> Game<P, I, D> {
     /// Get the status of the game. Returns `None` if the game is in progress, otherwise
     /// returns the winner.
     pub fn winner(&self) -> Option<&P> {
-        let remaining = self.boards.values().filter(|board| !board.defeated()).count();
+        let remaining = self
+            .boards
+            .values()
+            .filter(|board| !board.defeated())
+            .count();
         debug_assert!(remaining > 0);
         if remaining == 1 {
             Some(self.current())
@@ -189,34 +196,50 @@ impl<P: PlayerId, I: ShipId, D: Dimensions> Game<P, I, D> {
     }
 
     /// Get a reference to the board for the specified player.
-    pub fn get_board<Q: ?Sized>(&self, pid: &Q) -> Option<&Board<I, D>> 
+    pub fn get_board<Q: ?Sized>(&self, pid: &Q) -> Option<&Board<I, D>>
     where
-    P: Borrow<Q>,
-    Q: Eq + Hash,
+        P: Borrow<Q>,
+        Q: Eq + Hash,
     {
         self.boards.get(pid)
     }
 
     /// Iterate the player ids and boards in turn-order.
-    pub fn iter_boards(&self) -> impl Iterator<Item=(&P, &Board<I, D>)> {
-        self.turn_order.iter().map(move |pid| (pid, &self.boards[pid]))
+    pub fn iter_boards(&self) -> impl Iterator<Item = (&P, &Board<I, D>)> {
+        self.turn_order
+            .iter()
+            .map(move |pid| (pid, &self.boards[pid]))
     }
 
     /// Fire a shot at the specified player, returning the result of the shot or
     /// an error if the shot was invalid.
-    pub fn shoot(&mut self, target: P, coord: D::Coordinate) -> Result<ShotResult<I>, ShotError<P, D::Coordinate>> {
+    pub fn shoot(
+        &mut self,
+        target: P,
+        coord: D::Coordinate,
+    ) -> Result<ShotResult<I>, ShotError<P, D::Coordinate>> {
         if self.winner().is_some() {
-            Err(ShotError::new(CannotShootReason::AlreadyOver, target, coord))
+            Err(ShotError::new(
+                CannotShootReason::AlreadyOver,
+                target,
+                coord,
+            ))
         } else if self.current() == &target {
             Err(ShotError::new(CannotShootReason::SelfShot, target, coord))
         } else if let Some(board) = self.boards.get_mut(&target) {
             match board.shoot(coord) {
-                Ok(BoardShotResult::Defeated(id)) if self.winner().is_some() => Ok(ShotResult::Victory(id)),
+                Ok(BoardShotResult::Defeated(id)) if self.winner().is_some() => {
+                    Ok(ShotResult::Victory(id))
+                }
                 Ok(res) => Ok(res.into()),
                 Err(err) => Err(ShotError::add_context(err, target)),
             }
         } else {
-            Err(ShotError::new(CannotShootReason::UnknownPlayer, target, coord))
+            Err(ShotError::new(
+                CannotShootReason::UnknownPlayer,
+                target,
+                coord,
+            ))
         }
     }
 }

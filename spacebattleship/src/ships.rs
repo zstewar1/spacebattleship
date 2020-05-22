@@ -4,12 +4,10 @@ use std::{fmt::Debug, hash::Hash};
 use crate::board::Dimensions;
 
 /// Trait for types that can be used as a Ship's ID within a single player's board.
-/// Auto-implemented for any type which implements `Clone`, `Eq`, and `Hash`.
+/// IDs are treated as disposable and cheaply cloneable. If you need a complex ID type
+/// that isn't cheap to clone, you may want to wrap it in `Rc` or `Arc`.
 ///
-/// Note: types used as ShipIds should be chosen to be small and efficient to clone, as a
-/// copy of the ID will be stored in every cell that that ship occupies. If you want a
-/// complex key, you may want to store the key in `Rc` or `Arc` to reduce the cloning
-/// cost.
+/// Auto-implemented for any type which implements `Debug`,`Clone`, `Eq`, and `Hash`.
 pub trait ShipId: Debug + Clone + Eq + Hash {}
 impl<T: Debug + Clone + Eq + Hash> ShipId for T {}
 

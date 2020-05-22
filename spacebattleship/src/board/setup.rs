@@ -1,7 +1,5 @@
 //! Implements the setup phase of the board.
-use std::{
-    collections::{hash_map::Entry, HashMap},
-};
+use std::collections::{hash_map::Entry, HashMap};
 
 use crate::{
     board::{AddShipError, Board, CannotPlaceReason, Dimensions, Grid, PlaceError},
@@ -144,7 +142,10 @@ impl<I: ShipId, D: Dimensions, S: ShipShape<D>> BoardSetup<I, D, S> {
                 ships: self
                     .ships
                     .into_iter()
-                    .map(|(id, mut info)| (id, info.placement.take().unwrap()))
+                    .map(|(id, info)| match info.placement {
+                        Some(placement) => (id, placement),
+                        None => unreachable!(),
+                    })
                     .collect(),
             })
         }
@@ -158,15 +159,13 @@ impl<I: ShipId, D: Dimensions, S: ShipShape<D>> BoardSetup<I, D, S> {
 
     /// Get an iterator over the IDs of any ships which still need to be placed.
     pub fn pending_ships(&self) -> impl Iterator<Item = &I> {
-        self.ships.iter().filter_map(
-            |(id, ship)| {
-                if ship.placement.is_some() {
-                    None
-                } else {
-                    Some(id)
-                }
-            },
-        )
+        self.ships.iter().filter_map(|(id, ship)| {
+            if ship.placement.is_some() {
+                None
+            } else {
+                Some(id)
+            }
+        })
     }
 
     /// Attempts to add a ship with the given ID. If the given ShipID is already used,

@@ -2,7 +2,9 @@ use std::{fmt::Debug, hash::Hash};
 
 /// Trait for coordinates used in [`Dimensions`].
 /// Requires [`Debug`] to enable certain common panic messages on misuse.
-pub trait Coordinate: Debug + Eq + Hash {}
+/// Coordinates are treated as disposable and cheaply cloneable. If you need a complex
+/// coordinate type that isn't cheap to clone, you may want to wrap it in `Rc` or `Arc`.
+pub trait Coordinate: Debug + Clone + Eq + Hash {}
 
 /// Dimensions of a board.
 /// Implements methods needed for the board to check bounds, linearize indexes, and compute

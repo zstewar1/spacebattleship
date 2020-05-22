@@ -116,9 +116,9 @@ impl<I> ShotResult<I> {
     pub fn ship(&self) -> Option<&I> {
         match self {
             ShotResult::Miss => None,
-            ShotResult::Hit(ref id)
-            | ShotResult::Sunk(ref id)
-            | ShotResult::Defeated(ref id) => Some(id),
+            ShotResult::Hit(ref id) | ShotResult::Sunk(ref id) | ShotResult::Defeated(ref id) => {
+                Some(id)
+            }
         }
     }
 
@@ -126,9 +126,7 @@ impl<I> ShotResult<I> {
     pub fn into_ship(self) -> Option<I> {
         match self {
             ShotResult::Miss => None,
-            ShotResult::Hit(id)
-            | ShotResult::Sunk(id)
-            | ShotResult::Defeated(id) => Some(id),
+            ShotResult::Hit(id) | ShotResult::Sunk(id) | ShotResult::Defeated(id) => Some(id),
         }
     }
 }
