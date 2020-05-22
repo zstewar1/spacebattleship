@@ -30,6 +30,9 @@ pub trait Dimensions: Debug {
     /// Returns `None` if the coordinate is out of bound for the dimension.
     fn try_linearize(&self, coord: &Self::Coordinate) -> Option<usize>;
 
+    /// Get back a coordinate from a linearized index. Panic if idx is >= total_size.
+    fn un_linearize(&self, idx: usize) -> Self::Coordinate;
+
     /// Iterate the neighbors of the given coordinate.
     fn neighbors(&self, coord: Self::Coordinate) -> NeighborIter<Self::NeighborIterState> {
         NeighborIter {

@@ -1,11 +1,10 @@
 //! Implements the setup phase of the board.
 use std::{
     collections::{hash_map::Entry, HashMap},
-    mem,
 };
 
 use crate::{
-    board::{Board, CannotPlaceReason, Dimensions, Grid, PlaceError},
+    board::{AddShipError, Board, CannotPlaceReason, Dimensions, Grid, PlaceError},
     ships::{ProjectIter, ShapeProjection, ShipId, ShipShape},
 };
 
@@ -24,8 +23,13 @@ pub struct ShipEntry<'a, I, D: Dimensions, S> {
 
 impl<'a, I: ShipId, D: Dimensions, S: ShipShape<D>> ShipEntry<'a, I, D, S> {
     /// Returns true if this ship has been placed.
-    pub fn is_placed(&self) -> bool {
-        self.ship.state.is_placed()
+    pub fn placed(&self) -> bool {
+        self.ship.placement.is_some()
+    }
+
+    /// If the ship is placed, get the placement. Otherwise return `None`.
+    pub fn placement(&self) -> Option<&ShapeProjection<D::Coordinate>> {
+        self.ship.placement.as_ref()
     }
 
     /// Get an interator over possible projections of the shape for this ship that
@@ -42,13 +46,9 @@ impl<'a, I: ShipId, D: Dimensions, S: ShipShape<D>> ShipEntry<'a, I, D, S> {
     pub fn place(
         &mut self,
         placement: ShapeProjection<D::Coordinate>,
-    ) -> Result<(), PlaceError<I, D::Coordinate>> {
-        if self.ship.state.is_placed() {
-            Err(PlaceError::new(
-                CannotPlaceReason::AlreadyPlaced,
-                self.id.to_owned(),
-                placement,
-            ))
+    ) -> Result<(), PlaceError<ShapeProjection<D::Coordinate>>> {
+        if self.placed() {
+            Err(PlaceError::new(CannotPlaceReason::AlreadyPlaced, placement))
         } else if !self
             .ship
             .shape
@@ -56,7 +56,6 @@ impl<'a, I: ShipId, D: Dimensions, S: ShipShape<D>> ShipEntry<'a, I, D, S> {
         {
             Err(PlaceError::new(
                 CannotPlaceReason::InvalidProjection,
-                self.id.to_owned(),
                 placement,
             ))
         } else {
@@ -67,14 +66,12 @@ impl<'a, I: ShipId, D: Dimensions, S: ShipShape<D>> ShipEntry<'a, I, D, S> {
                         // trust it.
                         return Err(PlaceError::new(
                             CannotPlaceReason::InvalidProjection,
-                            self.id.to_owned(),
                             placement,
                         ));
                     }
                     Some(cell) if cell.ship.is_some() => {
                         return Err(PlaceError::new(
                             CannotPlaceReason::AlreadyOccupied,
-                            self.id.to_owned(),
                             placement,
                         ));
                     }
@@ -85,7 +82,7 @@ impl<'a, I: ShipId, D: Dimensions, S: ShipShape<D>> ShipEntry<'a, I, D, S> {
             for coord in placement.iter() {
                 self.grid[coord].ship = Some(self.id.to_owned());
             }
-            self.ship.state = PlacementState::Placed(placement);
+            self.ship.placement = Some(placement);
             Ok(())
         }
     }
@@ -93,16 +90,13 @@ impl<'a, I: ShipId, D: Dimensions, S: ShipShape<D>> ShipEntry<'a, I, D, S> {
     /// Attempt to clear the placement of the ship. Returns the previous placement of the
     /// ship if any. Returns `None` if the ship has not been placed.
     pub fn unplace(&mut self) -> Option<ShapeProjection<D::Coordinate>> {
-        match mem::replace(&mut self.ship.state, PlacementState::Pending) {
-            PlacementState::Pending => None,
-            PlacementState::Placed(placement) => {
-                for coord in placement.iter() {
-                    // We should only allow placement on valid cells, so unwrap is fine.
-                    self.grid[coord].ship = None;
-                }
-                Some(placement)
+        self.ship.placement.take().map(|placement| {
+            for coord in placement.iter() {
+                // We should only allow placement on valid cells, so unwrap is fine.
+                self.grid[coord].ship = None;
             }
-        }
+            placement
+        })
     }
 }
 
@@ -111,26 +105,8 @@ struct ShipPlacementInfo<S, C> {
     /// Shape being placed.
     shape: S,
 
-    /// Status of placement for this ship.
-    state: PlacementState<C>,
-}
-
-/// Placement state for a single ship.
-enum PlacementState<C> {
-    /// The ship needs to be placed.
-    Pending,
-    /// The ship has been placed, with the given coordinates.
-    Placed(ShapeProjection<C>),
-}
-
-impl<C> PlacementState<C> {
-    /// Checks if this ship has been placed.
-    fn is_placed(&self) -> bool {
-        match self {
-            PlacementState::Pending => false,
-            PlacementState::Placed(_) => true,
-        }
-    }
+    /// Placement of this ship, if it has been placed.
+    placement: Option<ShapeProjection<C>>,
 }
 
 /// Setup phase for a [`Board`]. Allows placing ships and does not allow shooting.
@@ -157,9 +133,10 @@ impl<I: ShipId, D: Dimensions, S: ShipShape<D>> BoardSetup<I, D, S> {
     }
 
     /// Tries to start the game. If all ships are placed, returns a [`Board`] with the
-    /// current placements. If any ship has not been placed, returns self.
+    /// current placements. If no ships have been added or any ship has not been placed,
+    /// returns self.
     pub fn start(self) -> Result<Board<I, D>, Self> {
-        if !self.all_placed() {
+        if !self.ready() {
             Err(self)
         } else {
             Ok(Board {
@@ -167,43 +144,47 @@ impl<I: ShipId, D: Dimensions, S: ShipShape<D>> BoardSetup<I, D, S> {
                 ships: self
                     .ships
                     .into_iter()
-                    .map(|(k, ShipPlacementInfo { state, .. })| match state {
-                        PlacementState::Pending => unreachable!(),
-                        PlacementState::Placed(placement) => (k, placement),
-                    })
+                    .map(|(id, mut info)| (id, info.placement.take().unwrap()))
                     .collect(),
             })
         }
     }
 
-    /// Checks if all ships currently added to setup have been placed.
-    pub fn all_placed(&self) -> bool {
-        self.ships.values().all(|ship| ship.state.is_placed())
+    /// Checks if this board is ready to start. Returns `true` if at least one ship has
+    /// been added and all ships are placed.
+    pub fn ready(&self) -> bool {
+        !self.ships.is_empty() && self.ships.values().all(|ship| ship.placement.is_some())
     }
 
     /// Get an iterator over the IDs of any ships which still need to be placed.
     pub fn pending_ships(&self) -> impl Iterator<Item = &I> {
-        self.ships.iter().filter_map(|(id, ship)| {
-            if ship.state.is_placed() {
-                None
-            } else {
-                Some(id)
-            }
-        })
+        self.ships.iter().filter_map(
+            |(id, ship)| {
+                if ship.placement.is_some() {
+                    None
+                } else {
+                    Some(id)
+                }
+            },
+        )
     }
 
     /// Attempts to add a ship with the given ID. If the given ShipID is already used,
     /// returns the shape passed to this function. Otherwise adds the shape and returns
-    /// `Ok(())`.
-    pub fn add_ship(&mut self, id: I, shape: S) -> Result<(), S> {
-        match self.ships.entry(id) {
-            Entry::Occupied(_) => Err(shape),
+    /// the ShipEntry for it to allow placement.
+    pub fn add_ship(&mut self, id: I, shape: S) -> Result<ShipEntry<I, D, S>, AddShipError<I, S>> {
+        match self.ships.entry(id.clone()) {
+            Entry::Occupied(_) => Err(AddShipError::new(id, shape)),
             Entry::Vacant(entry) => {
-                entry.insert(ShipPlacementInfo {
+                let ship = entry.insert(ShipPlacementInfo {
                     shape,
-                    state: PlacementState::Pending,
+                    placement: None,
                 });
-                Ok(())
+                Ok(ShipEntry {
+                    id,
+                    grid: &mut self.grid,
+                    ship,
+                })
             }
         }
     }

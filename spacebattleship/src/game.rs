@@ -17,9 +17,7 @@
 pub mod simple {
     //! Not yet implemented.
 }
-pub mod uniform {
-    //! Not yet implemented.
-}
+pub mod uniform;
 pub mod dynamic {
     //! Not yet implemented.
 }

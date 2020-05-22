@@ -28,6 +28,7 @@ impl<I> Default for GridCell<I> {
 }
 
 /// Grid structure shared between [`BoardSetup`] and [`Board`].
+#[derive(Debug)]
 pub(super) struct Grid<I, D> {
     /// Dimensions of this board.
     pub(super) dim: D,
