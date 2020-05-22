@@ -6,7 +6,7 @@ use crate::ships::{ShapeProjection, ShipId};
 
 use self::grid::Grid;
 pub use self::{
-    dimensions::{Coordinate, Dimensions, NeighborIter, NeighborIterState},
+    dimensions::{ColinearCheck, Coordinate, Dimensions, NeighborIter, NeighborIterState},
     errors::{AddShipError, CannotPlaceReason, CannotShootReason, PlaceError, ShotError},
     setup::BoardSetup,
 };

@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 
 use enumflags2::BitFlags;
 
-use crate::board::{Dimensions, NeighborIterState};
+use crate::board::{ColinearCheck, Dimensions, NeighborIterState};
 
 pub use crate::board::common::Coordinate2D as Coordinate;
 
@@ -155,6 +155,15 @@ impl Dimensions for RectDimensions {
             x: idx % self.width,
             y: idx / self.width,
         }
+    }
+}
+
+impl ColinearCheck for RectDimensions {
+    fn colinear(c1: Coordinate, c2: Coordinate, c3: Coordinate) -> bool {
+        let difx = c1.x != c2.x || c2.x != c3.x;
+        let dify = c1.y != c2.y || c2.y != c3.y;
+        // Allowed to differ in only one direction.
+        !(difx && dify)
     }
 }
 
