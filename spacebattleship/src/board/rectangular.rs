@@ -159,7 +159,7 @@ impl Dimensions for RectDimensions {
 }
 
 impl ColinearCheck for RectDimensions {
-    fn colinear(c1: Coordinate, c2: Coordinate, c3: Coordinate) -> bool {
+    fn is_colinear(&self, c1: &Coordinate, c2: &Coordinate, c3: &Coordinate) -> bool {
         let difx = c1.x != c2.x || c2.x != c3.x;
         let dify = c1.y != c2.y || c2.y != c3.y;
         // Allowed to differ in only one direction.

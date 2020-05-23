@@ -3,6 +3,10 @@ use std::{fmt::Debug, hash::Hash};
 
 use crate::board::Dimensions;
 
+pub use self::linear::Line;
+
+mod linear;
+
 /// Trait for types that can be used as a Ship's ID within a single player's board.
 /// IDs are treated as disposable and cheaply cloneable. If you need a complex ID type
 /// that isn't cheap to clone, you may want to wrap it in `Rc` or `Arc`.

@@ -42,12 +42,23 @@ pub trait Dimensions: Debug {
             state: Self::NeighborIterState::start(self, coord),
         }
     }
+
+    /// Return true if the given coordinates are neighbors. Defeault implemntation checks
+    /// the neighbors iter. A board may wish to provide a more efficient implementation.
+    fn is_neighbor(&self, c1: &Self::Coordinate, c2: &Self::Coordinate) -> bool {
+        self.neighbors(c1.clone()).any(|n| &n == c2)
+    }
 }
 
 /// Trait for [`Dimensions`] that support colinearity checks on their coordinates.
 pub trait ColinearCheck: Dimensions {
     /// Returns true if the 3 coordinates are colinear.
-    fn colinear(c1: Self::Coordinate, c2: Self::Coordinate, c3: Self::Coordinate) -> bool;
+    fn is_colinear(
+        &self,
+        c1: &Self::Coordinate,
+        c2: &Self::Coordinate,
+        c3: &Self::Coordinate,
+    ) -> bool;
 }
 
 /// State type for the neighbor iterator.
