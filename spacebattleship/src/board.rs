@@ -99,7 +99,7 @@ impl<'a, I, D: Dimensions> CellRef<'a, I, D> {
 }
 
 /// Result of a shot on a single player's board.
-pub enum ShotResult<I> {
+pub enum ShotOutcome<I> {
     /// The shot did not hit anything.
     Miss,
     /// The shot hit the ship with the given ID, but did not sink it.
@@ -111,12 +111,12 @@ pub enum ShotResult<I> {
     Defeated(I),
 }
 
-impl<I> ShotResult<I> {
+impl<I> ShotOutcome<I> {
     /// Get the id of the ship that was hit.
     pub fn ship(&self) -> Option<&I> {
         match self {
-            ShotResult::Miss => None,
-            ShotResult::Hit(ref id) | ShotResult::Sunk(ref id) | ShotResult::Defeated(ref id) => {
+            ShotOutcome::Miss => None,
+            ShotOutcome::Hit(ref id) | ShotOutcome::Sunk(ref id) | ShotOutcome::Defeated(ref id) => {
                 Some(id)
             }
         }
@@ -125,8 +125,8 @@ impl<I> ShotResult<I> {
     /// Extract the id of the ship that was hit from this result.
     pub fn into_ship(self) -> Option<I> {
         match self {
-            ShotResult::Miss => None,
-            ShotResult::Hit(id) | ShotResult::Sunk(id) | ShotResult::Defeated(id) => Some(id),
+            ShotOutcome::Miss => None,
+            ShotOutcome::Hit(id) | ShotOutcome::Sunk(id) | ShotOutcome::Defeated(id) => Some(id),
         }
     }
 }
@@ -192,7 +192,7 @@ impl<I: ShipId, D: Dimensions> Board<I, D> {
     pub fn shoot(
         &mut self,
         coord: D::Coordinate,
-    ) -> Result<ShotResult<I>, ShotError<D::Coordinate>> {
+    ) -> Result<ShotOutcome<I>, ShotError<D::Coordinate>> {
         if self.defeated() {
             return Err(ShotError::new(CannotShootReason::AlreadyDefeated, coord));
         }
@@ -207,10 +207,10 @@ impl<I: ShipId, D: Dimensions> Board<I, D> {
             }
         };
         Ok(match hit_ship {
-            None => ShotResult::Miss,
-            Some(ship) if self.defeated() => ShotResult::Defeated(ship),
-            Some(ship) if self.get_ship(&ship).unwrap().sunk() => ShotResult::Sunk(ship),
-            Some(ship) => ShotResult::Hit(ship),
+            None => ShotOutcome::Miss,
+            Some(ship) if self.defeated() => ShotOutcome::Defeated(ship),
+            Some(ship) if self.get_ship(&ship).unwrap().sunk() => ShotOutcome::Sunk(ship),
+            Some(ship) => ShotOutcome::Hit(ship),
         })
     }
 }

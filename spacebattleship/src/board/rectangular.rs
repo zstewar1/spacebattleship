@@ -148,14 +148,6 @@ impl Dimensions for RectDimensions {
         self.check_bounds(coord)
             .map(|coord| coord.y * self.width + coord.x)
     }
-
-    /// Convert a linear index back into a [`Coordinate`].
-    fn un_linearize(&self, idx: usize) -> Coordinate {
-        Coordinate {
-            x: idx % self.width,
-            y: idx / self.width,
-        }
-    }
 }
 
 impl ColinearCheck for RectDimensions {

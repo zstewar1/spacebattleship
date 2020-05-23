@@ -276,4 +276,10 @@ impl<I: ShipId, D: Dimensions, S: ShipShape<D>> BoardSetup<I, D, S> {
             .get_mut(&id)
             .map(move |ship| ShipEntryMut { id, grid, ship })
     }
+
+    /// Get the ID of the ship placed at the specified coordinate if any. Returns None if
+    /// the coordinate is out of bounds or no ship was placed on the specified point.
+    pub fn get_coord(&self, coord: &D::Coordinate) -> Option<&I> {
+        self.grid.get(coord).and_then(|cell| cell.ship.as_ref())
+    }
 }

@@ -1,20 +1,22 @@
 //! Implementation of the basic game of battleship with two players and five ships on a
 //! 10x10 grid.
-use std::{
-    cmp::Ordering,
-    ops::Deref,
-};
+use std::{cmp::Ordering, ops::Deref};
 
 use thiserror::Error;
 
 use crate::{
     board::{
         rectangular::{Coordinate, RectDimensions},
-        BoardSetup, CannotPlaceReason as BoardCannotPlaceReason,
+        BoardSetup, self,
     },
     game::uniform,
     ships::{Line, ShapeProjection},
 };
+
+/// Alias to ShipRef with fixed generic types.
+pub type ShipRef<'a> = board::ShipRef<'a, Ship, RectDimensions>;
+/// Alias to CellRef with fixed generic types.
+pub type CellRef<'a> = board::CellRef<'a, Ship, RectDimensions>;
 
 /// Player ID for the simple game. Either `P1` or `P2`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -67,7 +69,7 @@ impl Ship {
 }
 
 /// Reason why a ship could not be placed at a given position.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Copy, Clone, Eq, PartialEq)]
 pub enum CannotPlaceReason {
     /// The ship did not fit in the given direction.
     #[error("insufficient space for the ship at the specified position")]
@@ -130,7 +132,7 @@ impl Placement {
                 (Ordering::Equal, Ordering::Greater) => Orientation::Down,
                 (Ordering::Less, Ordering::Equal) => Orientation::Left,
                 (Ordering::Greater, Ordering::Equal) => Orientation::Right,
-                // Shouldn't happen since we don't allow building paths that don't follow 
+                // Shouldn't happen since we don't allow building paths that don't follow
                 // these rules.
                 _ => panic!("Coordinates don't point along a valid orientation"),
             }
@@ -140,7 +142,7 @@ impl Placement {
     /// Get the coordinate where this placement starts.
     pub fn start(&self) -> &Coordinate {
         // This will panic if len is 0. That's OK because this type has no public
-        // constructor and we know that within this module we never create placements with 
+        // constructor and we know that within this module we never create placements with
         // 0 length.
         &self[0]
     }
@@ -257,10 +259,10 @@ impl GameSetup {
             .find(|proj| dir.check_dir(proj))
             .ok_or(CannotPlaceReason::InsufficientSpace)?;
         ship.check_placement(&proj).map_err(|err| match err {
-            BoardCannotPlaceReason::AlreadyOccupied => CannotPlaceReason::AlreadyOccupied,
-            BoardCannotPlaceReason::AlreadyPlaced => CannotPlaceReason::AlreadyPlaced,
+            board::CannotPlaceReason::AlreadyOccupied => CannotPlaceReason::AlreadyOccupied,
+            board::CannotPlaceReason::AlreadyPlaced => CannotPlaceReason::AlreadyPlaced,
             // We will never provide an invalid projection.
-            BoardCannotPlaceReason::InvalidProjection => unreachable!(),
+            board::CannotPlaceReason::InvalidProjection => unreachable!(),
         })
     }
 
@@ -280,10 +282,10 @@ impl GameSetup {
             .find(|proj| dir.check_dir(proj))
             .ok_or(CannotPlaceReason::InsufficientSpace)?;
         ship.place(proj).map_err(|err| match err.reason() {
-            BoardCannotPlaceReason::AlreadyOccupied => CannotPlaceReason::AlreadyOccupied,
-            BoardCannotPlaceReason::AlreadyPlaced => CannotPlaceReason::AlreadyPlaced,
+            board::CannotPlaceReason::AlreadyOccupied => CannotPlaceReason::AlreadyOccupied,
+            board::CannotPlaceReason::AlreadyPlaced => CannotPlaceReason::AlreadyPlaced,
             // We will never provide an invalid projection.
-            BoardCannotPlaceReason::InvalidProjection => unreachable!(),
+            board::CannotPlaceReason::InvalidProjection => unreachable!(),
         })
     }
 
@@ -298,7 +300,118 @@ impl GameSetup {
             .unplace()
             .is_some()
     }
+
+    /// Get an iterator over the specified player's board. The iterator's item is another
+    /// iterator that iterates over a single row.
+    pub fn iter_board<'a>(
+        &'a self,
+        player: Player,
+    ) -> impl 'a + Iterator<Item = impl 'a + Iterator<Item = Option<Ship>>> {
+        let board = self.0.get_board(&player).unwrap();
+        board
+            .dimensions()
+            .iter_coordinates()
+            .map(move |row| row.map(move |coord| board.get_coord(&coord).copied()))
+    }
+}
+
+/// Reason why a shot at the board failed.
+#[derive(Debug, Error, Copy, Clone, Eq, PartialEq)]
+pub enum CannotShootReason {
+    /// The game is already over
+    #[error("the game is already over")]
+    AlreadyOver,
+
+    /// The target player is the player whose turn it is.
+    #[error("player attempted to shoot out of turn")]
+    OutOfTurn,
+
+    /// The specified cell is out of bounds for the grid.
+    #[error("the target coordinate is out of bounds")]
+    OutOfBounds,
+
+    /// The specified cell has already been shot.
+    #[error("the target cell was already shot")]
+    AlreadyShot,
+}
+
+/// Outcome of a successfully-fired shot.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ShotOutcome {
+    /// Nothing was hit.
+    Miss,
+    /// The given ship was hit but it was not sunk.
+    Hit(Ship),
+    /// The given ship was hit and it was sunk but the player still had other ships.
+    Sunk(Ship),
+    /// The given ship was hit and sunk, and the target player has no remaining ships.
+    Victory(Ship),
 }
 
 /// Simplified game that uses a fixed set of ships and players.
 pub struct Game(uniform::Game<Player, Ship, RectDimensions>);
+
+impl Game {
+    /// Get the player whose turn it currently is.
+    pub fn current(&self) -> Player {
+        *self.0.current()
+    }
+
+    /// Get the status of the game. Returns `None` if the game is in progress, otherwise
+    /// returns the winner.
+    pub fn winner(&self) -> Option<Player> {
+        self.0.winner().copied()
+    }
+
+    /// Get an iterator over the specified player's board. The iterator's item is another
+    /// iterator that iterates over a single row.
+    pub fn iter_board<'a>(
+        &'a self,
+        player: Player,
+    ) -> impl 'a + Iterator<Item = impl 'a + Iterator<Item = CellRef<'a>>> {
+        let board = self.0.get_board(&player).unwrap();
+        board
+            .dimensions()
+            .iter_coordinates()
+            .map(move |row| row.map(move |coord| board.get_coord(coord).unwrap()))
+    }
+
+    /// Get an iterator over the specified player's ships.
+    pub fn iter_ships<'a>(&'a self, player: Player) -> impl 'a + Iterator<Item = ShipRef<'a>> {
+        self.0.get_board(&player).unwrap().iter_ships()
+    }
+
+    /// Get a reference to the cell with the specified coordinate in the specified 
+    /// player's board. Return None if the coord is out of bounds.
+    pub fn get_coord(&self, player: Player, coord: Coordinate) -> Option<CellRef> {
+        self.0.get_board(&player).unwrap().get_coord(coord)
+    }
+
+    /// Get a reference to the specified ship from the specified player's board.
+    pub fn get_ship(&self, player: Player, ship: Ship) -> ShipRef {
+        self.0.get_board(&player).unwrap().get_ship(&ship).unwrap()
+    }
+
+    /// Fire at the specified player on the specified coordinate.
+    pub fn shoot(&mut self, target: Player, coord: Coordinate) -> Result<ShotOutcome, CannotShootReason> {
+        self.0.shoot(target, coord).map(|outcome| match outcome {
+            uniform::ShotOutcome::Miss => ShotOutcome::Miss,
+            uniform::ShotOutcome::Hit(ship) => ShotOutcome::Hit(ship),
+            uniform::ShotOutcome::Sunk(ship) => ShotOutcome::Sunk(ship),
+            // There are only two players so if one is defeated, we should go directly to
+            // victory and never hit Defeated.
+            uniform::ShotOutcome::Defeated(_) => unreachable!(),
+            uniform::ShotOutcome::Victory(ship) => ShotOutcome::Victory(ship),
+        }).map_err(|err| match err.reason() {
+            uniform::CannotShootReason::AlreadyOver => CannotShootReason::AlreadyOver,
+            uniform::CannotShootReason::SelfShot => CannotShootReason::OutOfTurn,
+            // There are always exactly two players, so player will never be unknown.
+            uniform::CannotShootReason::UnknownPlayer => unreachable!(),
+            // Since there are only 2 players, if one is defeated, the reason will be 
+            // AlreadyOver not AlreadyDefeated
+            uniform::CannotShootReason::AlreadyDefeated => unreachable!(),
+            uniform::CannotShootReason::OutOfBounds => CannotShootReason::OutOfBounds,
+            uniform::CannotShootReason::AlreadyShot => CannotShootReason::AlreadyShot,
+        })
+    }
+}

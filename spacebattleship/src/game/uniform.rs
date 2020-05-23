@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    board::{Board, BoardSetup, Dimensions, ShotResult as BoardShotResult},
+    board::{Board, BoardSetup, Dimensions, ShotOutcome as BoardShotOutcome},
     ships::{ShipId, ShipShape},
 };
 
@@ -111,7 +111,7 @@ impl<P: PlayerId, I: ShipId, D: Dimensions, S: ShipShape<D>> Default for GameSet
 }
 
 /// Result of a shot on a single player's board.
-pub enum ShotResult<I> {
+pub enum ShotOutcome<I> {
     /// The shot did not hit anything.
     Miss,
     /// The shot hit the ship with the given ID, but did not sink it.
@@ -126,37 +126,37 @@ pub enum ShotResult<I> {
     Victory(I),
 }
 
-impl<I> ShotResult<I> {
+impl<I> ShotOutcome<I> {
     /// Get the id of the ship that was hit.
     pub fn ship(&self) -> Option<&I> {
         match self {
-            ShotResult::Miss => None,
-            ShotResult::Hit(ref id)
-            | ShotResult::Sunk(ref id)
-            | ShotResult::Defeated(ref id)
-            | ShotResult::Victory(ref id) => Some(id),
+            ShotOutcome::Miss => None,
+            ShotOutcome::Hit(ref id)
+            | ShotOutcome::Sunk(ref id)
+            | ShotOutcome::Defeated(ref id)
+            | ShotOutcome::Victory(ref id) => Some(id),
         }
     }
 
     /// Extract the id of the ship that was hit from this result.
     pub fn into_ship(self) -> Option<I> {
         match self {
-            ShotResult::Miss => None,
-            ShotResult::Hit(id)
-            | ShotResult::Sunk(id)
-            | ShotResult::Defeated(id)
-            | ShotResult::Victory(id) => Some(id),
+            ShotOutcome::Miss => None,
+            ShotOutcome::Hit(id)
+            | ShotOutcome::Sunk(id)
+            | ShotOutcome::Defeated(id)
+            | ShotOutcome::Victory(id) => Some(id),
         }
     }
 }
 
-impl<I> From<BoardShotResult<I>> for ShotResult<I> {
-    fn from(shot: BoardShotResult<I>) -> Self {
+impl<I> From<BoardShotOutcome<I>> for ShotOutcome<I> {
+    fn from(shot: BoardShotOutcome<I>) -> Self {
         match shot {
-            BoardShotResult::Miss => ShotResult::Miss,
-            BoardShotResult::Hit(id) => ShotResult::Hit(id),
-            BoardShotResult::Sunk(id) => ShotResult::Sunk(id),
-            BoardShotResult::Defeated(id) => ShotResult::Defeated(id),
+            BoardShotOutcome::Miss => ShotOutcome::Miss,
+            BoardShotOutcome::Hit(id) => ShotOutcome::Hit(id),
+            BoardShotOutcome::Sunk(id) => ShotOutcome::Sunk(id),
+            BoardShotOutcome::Defeated(id) => ShotOutcome::Defeated(id),
         }
     }
 }
@@ -217,7 +217,7 @@ impl<P: PlayerId, I: ShipId, D: Dimensions> Game<P, I, D> {
         &mut self,
         target: P,
         coord: D::Coordinate,
-    ) -> Result<ShotResult<I>, ShotError<P, D::Coordinate>> {
+    ) -> Result<ShotOutcome<I>, ShotError<P, D::Coordinate>> {
         if self.winner().is_some() {
             Err(ShotError::new(
                 CannotShootReason::AlreadyOver,
@@ -228,8 +228,8 @@ impl<P: PlayerId, I: ShipId, D: Dimensions> Game<P, I, D> {
             Err(ShotError::new(CannotShootReason::SelfShot, target, coord))
         } else if let Some(board) = self.boards.get_mut(&target) {
             match board.shoot(coord) {
-                Ok(BoardShotResult::Defeated(id)) if self.winner().is_some() => {
-                    Ok(ShotResult::Victory(id))
+                Ok(BoardShotOutcome::Defeated(id)) if self.winner().is_some() => {
+                    Ok(ShotOutcome::Victory(id))
                 }
                 Ok(res) => Ok(res.into()),
                 Err(err) => Err(ShotError::add_context(err, target)),
