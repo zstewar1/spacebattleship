@@ -116,9 +116,9 @@ impl<I> ShotOutcome<I> {
     pub fn ship(&self) -> Option<&I> {
         match self {
             ShotOutcome::Miss => None,
-            ShotOutcome::Hit(ref id) | ShotOutcome::Sunk(ref id) | ShotOutcome::Defeated(ref id) => {
-                Some(id)
-            }
+            ShotOutcome::Hit(ref id)
+            | ShotOutcome::Sunk(ref id)
+            | ShotOutcome::Defeated(ref id) => Some(id),
         }
     }
 

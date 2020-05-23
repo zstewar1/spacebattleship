@@ -4,11 +4,9 @@ use std::{cmp::Ordering, ops::Deref};
 
 use thiserror::Error;
 
+pub use crate::board::rectangular::Coordinate;
 use crate::{
-    board::{
-        rectangular::{Coordinate, RectDimensions},
-        BoardSetup, self,
-    },
+    board::{self, rectangular::RectDimensions, BoardSetup},
     game::uniform,
     ships::{Line, ShapeProjection},
 };
@@ -381,7 +379,7 @@ impl Game {
         self.0.get_board(&player).unwrap().iter_ships()
     }
 
-    /// Get a reference to the cell with the specified coordinate in the specified 
+    /// Get a reference to the cell with the specified coordinate in the specified
     /// player's board. Return None if the coord is out of bounds.
     pub fn get_coord(&self, player: Player, coord: Coordinate) -> Option<CellRef> {
         self.0.get_board(&player).unwrap().get_coord(coord)
@@ -393,25 +391,32 @@ impl Game {
     }
 
     /// Fire at the specified player on the specified coordinate.
-    pub fn shoot(&mut self, target: Player, coord: Coordinate) -> Result<ShotOutcome, CannotShootReason> {
-        self.0.shoot(target, coord).map(|outcome| match outcome {
-            uniform::ShotOutcome::Miss => ShotOutcome::Miss,
-            uniform::ShotOutcome::Hit(ship) => ShotOutcome::Hit(ship),
-            uniform::ShotOutcome::Sunk(ship) => ShotOutcome::Sunk(ship),
-            // There are only two players so if one is defeated, we should go directly to
-            // victory and never hit Defeated.
-            uniform::ShotOutcome::Defeated(_) => unreachable!(),
-            uniform::ShotOutcome::Victory(ship) => ShotOutcome::Victory(ship),
-        }).map_err(|err| match err.reason() {
-            uniform::CannotShootReason::AlreadyOver => CannotShootReason::AlreadyOver,
-            uniform::CannotShootReason::SelfShot => CannotShootReason::OutOfTurn,
-            // There are always exactly two players, so player will never be unknown.
-            uniform::CannotShootReason::UnknownPlayer => unreachable!(),
-            // Since there are only 2 players, if one is defeated, the reason will be 
-            // AlreadyOver not AlreadyDefeated
-            uniform::CannotShootReason::AlreadyDefeated => unreachable!(),
-            uniform::CannotShootReason::OutOfBounds => CannotShootReason::OutOfBounds,
-            uniform::CannotShootReason::AlreadyShot => CannotShootReason::AlreadyShot,
-        })
+    pub fn shoot(
+        &mut self,
+        target: Player,
+        coord: Coordinate,
+    ) -> Result<ShotOutcome, CannotShootReason> {
+        self.0
+            .shoot(target, coord)
+            .map(|outcome| match outcome {
+                uniform::ShotOutcome::Miss => ShotOutcome::Miss,
+                uniform::ShotOutcome::Hit(ship) => ShotOutcome::Hit(ship),
+                uniform::ShotOutcome::Sunk(ship) => ShotOutcome::Sunk(ship),
+                // There are only two players so if one is defeated, we should go directly to
+                // victory and never hit Defeated.
+                uniform::ShotOutcome::Defeated(_) => unreachable!(),
+                uniform::ShotOutcome::Victory(ship) => ShotOutcome::Victory(ship),
+            })
+            .map_err(|err| match err.reason() {
+                uniform::CannotShootReason::AlreadyOver => CannotShootReason::AlreadyOver,
+                uniform::CannotShootReason::SelfShot => CannotShootReason::OutOfTurn,
+                // There are always exactly two players, so player will never be unknown.
+                uniform::CannotShootReason::UnknownPlayer => unreachable!(),
+                // Since there are only 2 players, if one is defeated, the reason will be
+                // AlreadyOver not AlreadyDefeated
+                uniform::CannotShootReason::AlreadyDefeated => unreachable!(),
+                uniform::CannotShootReason::OutOfBounds => CannotShootReason::OutOfBounds,
+                uniform::CannotShootReason::AlreadyShot => CannotShootReason::AlreadyShot,
+            })
     }
 }
