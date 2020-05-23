@@ -51,13 +51,16 @@ impl<I: Debug, S> Debug for AddShipError<I, S> {
 }
 
 /// Reason why a ship could not be placed with a given projection.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Error, Copy, Clone, Eq, PartialEq)]
 pub enum CannotPlaceReason {
     /// The given ShipId was already placed.
+    #[error("ship was already placed")]
     AlreadyPlaced,
     /// The projection provided was not a valid projection of the specified ship.
+    #[error("the projection provided was not valid")]
     InvalidProjection,
     /// One or more of the cells in the projection was already occupied.
+    #[error("the requested position was already occupied")]
     AlreadyOccupied,
 }
 
@@ -65,6 +68,7 @@ pub enum CannotPlaceReason {
 #[derive(Error)]
 #[error("could not place ship: {reason:?}")]
 pub struct PlaceError<P> {
+    #[source]
     reason: CannotPlaceReason,
     placement: P,
 }

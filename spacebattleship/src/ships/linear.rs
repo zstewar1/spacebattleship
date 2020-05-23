@@ -100,7 +100,12 @@ impl<D: Dimensions + ColinearCheck + ?Sized> ProjectIterState<D>
 }
 
 /// Attempt to build a route in the given direction from the start.
-fn try_build_route<D: Dimensions + ColinearCheck + ?Sized>(dim: &D, len: usize, start: D::Coordinate, dir: D::Coordinate) -> Option<ShapeProjection<D::Coordinate>> {
+fn try_build_route<D: Dimensions + ColinearCheck + ?Sized>(
+    dim: &D,
+    len: usize,
+    start: D::Coordinate,
+    dir: D::Coordinate,
+) -> Option<ShapeProjection<D::Coordinate>> {
     let mut route = Vec::with_capacity(len);
     let mut visited = HashSet::with_capacity(len);
     route.push(start.clone());

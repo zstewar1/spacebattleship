@@ -14,9 +14,7 @@
 //! playing on a completely different board type with different ships and coordinate
 //! formats.
 
-pub mod simple {
-    //! Not yet implemented.
-}
+pub mod simple;
 pub mod uniform;
 pub mod dynamic {
     //! Not yet implemented.
