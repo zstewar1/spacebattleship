@@ -25,7 +25,7 @@ pub enum Player {
 
 impl Player {
     /// Get the oponent of this player.
-    pub fn oponent(self) -> Self {
+    pub fn opponent(self) -> Self {
         match self {
             Player::P1 => Player::P2,
             Player::P2 => Player::P1,
@@ -53,6 +53,15 @@ impl Ship {
     fn get_shape(self) -> Line {
         Line::new(self.len())
     }
+
+    /// Get a slice containing a list of all ships.
+    pub const ALL: &'static [Ship] = &[
+        Ship::Carrier,
+        Ship::Battleship,
+        Ship::Cruiser,
+        Ship::Submarine,
+        Ship::Destroyer,
+    ];
 
     /// Get the length of this ship type.
     pub fn len(self) -> usize {
@@ -99,10 +108,10 @@ impl Orientation {
             let dx = proj[0].x.cmp(&proj[1].x);
             let dy = proj[0].y.cmp(&proj[1].y);
             match (self, dx, dy) {
-                (Orientation::Up, Ordering::Equal, Ordering::Less) => true,
-                (Orientation::Down, Ordering::Equal, Ordering::Greater) => true,
-                (Orientation::Left, Ordering::Less, Ordering::Equal) => true,
-                (Orientation::Right, Ordering::Greater, Ordering::Equal) => true,
+                (Orientation::Up, Ordering::Equal, Ordering::Greater) => true,
+                (Orientation::Down, Ordering::Equal, Ordering::Less) => true,
+                (Orientation::Left, Ordering::Greater, Ordering::Equal) => true,
+                (Orientation::Right, Ordering::Less, Ordering::Equal) => true,
                 _ => false,
             }
         }
@@ -126,10 +135,10 @@ impl Placement {
             let dx = self[0].x.cmp(&self[1].x);
             let dy = self[0].y.cmp(&self[1].y);
             match (dx, dy) {
-                (Ordering::Equal, Ordering::Less) => Orientation::Up,
-                (Ordering::Equal, Ordering::Greater) => Orientation::Down,
-                (Ordering::Less, Ordering::Equal) => Orientation::Left,
-                (Ordering::Greater, Ordering::Equal) => Orientation::Right,
+                (Ordering::Equal, Ordering::Greater) => Orientation::Up,
+                (Ordering::Equal, Ordering::Less) => Orientation::Down,
+                (Ordering::Greater, Ordering::Equal) => Orientation::Left,
+                (Ordering::Less, Ordering::Equal) => Orientation::Right,
                 // Shouldn't happen since we don't allow building paths that don't follow
                 // these rules.
                 _ => panic!("Coordinates don't point along a valid orientation"),
@@ -418,5 +427,41 @@ impl Game {
                 uniform::CannotShootReason::OutOfBounds => CannotShootReason::OutOfBounds,
                 uniform::CannotShootReason::AlreadyShot => CannotShootReason::AlreadyShot,
             })
+    }
+}
+
+#[cfg(feature = "rng_gen")]
+mod rand_impl {
+    use super::{Orientation, Player};
+    use once_cell::sync::Lazy;
+    use rand::{
+        distributions::{Distribution, Standard, Uniform},
+        Rng,
+    };
+
+    /// Uniform sampler to use to get values for player selection.
+    static PLAYER_SAMPLER: Lazy<Uniform<u8>> = Lazy::new(|| Uniform::new(0, 2));
+
+    impl Distribution<Player> for Standard {
+        fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Player {
+            match rng.sample(&*PLAYER_SAMPLER) {
+                0 => Player::P1,
+                _ => Player::P2,
+            }
+        }
+    }
+
+    /// Uniform sampler to use to get values for orientation selection.
+    static ORIENTATION_SAMPLER: Lazy<Uniform<u8>> = Lazy::new(|| Uniform::new(0, 4));
+
+    impl Distribution<Orientation> for Standard {
+        fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Orientation {
+            match rng.sample(&*ORIENTATION_SAMPLER) {
+                0 => Orientation::Up,
+                1 => Orientation::Down,
+                2 => Orientation::Left,
+                _ => Orientation::Right,
+            }
+        }
     }
 }
