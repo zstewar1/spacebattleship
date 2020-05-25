@@ -231,7 +231,10 @@ impl<P: PlayerId, I: ShipId, D: Dimensions> Game<P, I, D> {
                 Ok(BoardShotOutcome::Defeated(id)) if self.winner().is_some() => {
                     Ok(ShotOutcome::Victory(id))
                 }
-                Ok(res) => Ok(res.into()),
+                Ok(res) => {
+                    self.current = (self.current + 1) % self.turn_order.len();
+                    Ok(res.into())
+                }
                 Err(err) => Err(ShotError::add_context(err, target)),
             }
         } else {

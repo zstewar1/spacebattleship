@@ -2,6 +2,8 @@ use std::{
     fmt,
     io::{self, BufRead, Write},
     str,
+    time::Duration,
+    thread,
 };
 
 use clap::{App, Arg, ArgMatches};
@@ -10,6 +12,7 @@ use rand::{distributions::Uniform, Rng};
 use regex::Regex;
 
 use spacebattleship::game::simple::{
+    ShotOutcome, CannotShootReason,
     CannotPlaceReason, Coordinate, Game, GameSetup, Orientation, Player, Ship,
 };
 
@@ -44,6 +47,17 @@ fn main() -> io::Result<()> {
     let mut setup = GameSetup::new();
     choose_placements(&mut rng, &mut setup, player, &mut input)?;
     choose_random_placements(&mut rng, &mut setup, bot);
+    let mut game = setup.start().map_err(|_| ()).unwrap();
+
+    while game.winner().is_none() {
+        if game.current() == player {
+            player_turn(&mut input, &mut game, player)?;
+        } else {
+            bot_turn(&mut rng, &mut game, bot);
+        }
+    }
+
+    show_status(&gmae, player);
 
     Ok(())
 }
@@ -144,28 +158,8 @@ fn choose_placements(
                         return None;
                     }
                 };
-                let x = match captures.name("x").unwrap().as_str().parse() {
-                    Err(_) => {
-                        println!("invalid x: {}, must be a number in range [0,9]", captures.name("x").unwrap().as_str());
-                        return None;
-                    }
-                    Ok(x) if x >= 10 => {
-                        println!("x must be in range [0,9], got {}", x);
-                        return None;
-                    }
-                    Ok(x) => x,
-                };
-                let y = match captures.name("y").unwrap().as_str().parse() {
-                    Err(_) => {
-                        println!("invalid y: {}", captures.name("y").unwrap().as_str());
-                        return None;
-                    }
-                    Ok(y) if y >= 10 => {
-                        println!("y must be in range [0,9], got {}", y);
-                        return None;
-                    }
-                    Ok(y) => y,
-                };
+                let x = read_coord(captures.name("x").unwrap().as_str(), "x")?;
+                let y = read_coord(captures.name("y").unwrap().as_str(), "y")?;
                 let dir = match captures.name("dir").unwrap().as_str() {
                     "up" | "north" | "u" | "n" => Orientation::Up,
                     "down" | "south" | "d" | "s" => Orientation::Down,
@@ -247,6 +241,22 @@ Available Ships:
     Ok(())
 }
 
+/// Read a single coordinate from a string. `name` is either 'x' or 'y' for the error 
+/// message if the coordinate is invalid.
+fn read_coord(src: &str, name: &str) -> Option<usize> {
+    match src.parse() {
+        Err(_) => {
+            println!("invalid {}: {}, must be a number in range [0,9]", name, src);
+            None
+        }
+        Ok(c) if c >= 10 => {
+            println!("{} must be in range [0,9], got {}", name, c);
+            None
+        }
+        Ok(c) => Some(c),
+    }
+}
+
 /// Choose all ship placements for all un-placed ships owned by the given player.
 fn choose_random_placements(rng: &mut impl Rng, setup: &mut GameSetup, player: Player) {
     for &ship in Ship::ALL {
@@ -257,6 +267,92 @@ fn choose_random_placements(rng: &mut impl Rng, setup: &mut GameSetup, player: P
                 Ok(()) | Err(CannotPlaceReason::AlreadyPlaced) => break,
                 _ => {}
             }
+        }
+    }
+}
+
+/// Handles the input for a player's turn.
+fn player_turn(input: &mut InputReader<impl BufRead>, game: &mut Game, player: Player) -> io::Result<()> {
+    println!();
+    println!("Your Turn!");
+    show_status(game, player);
+    println!();
+    println!("Choose coordinates to attack.");
+    loop {
+        static COORD: Lazy<Regex> = Lazy::new(|| 
+            Regex::new(r"^(?P<x>[0-9]+)(?:\s*,\s*|\s+)(?P<y>[0-9]+)$").unwrap()
+        );
+        let target = input.read_input_lower("> ", |input| match input {
+            "help" | "?" => {
+                println!("Enter an x,y coordinate pair to attack.");
+                None
+            }
+            other => if let Some(captures) = COORD.captures(other) {
+                let x = read_coord(captures.name("x").unwrap().as_str(), "x")?;
+                let y = read_coord(captures.name("y").unwrap().as_str(), "y")?;
+                Some(Coordinate::new(x, y))
+            } else {
+                println!("Invalid coordinates: {}", other);
+                None
+            }
+        })?;
+        match game.shoot(player.opponent(), target) {
+            Ok(outcome) => {
+                thread::sleep(Duration::from_secs(1));
+                println!();
+                match outcome {
+                    ShotOutcome::Miss => println!("Miss."),
+                    ShotOutcome::Hit(ship) => println!("Hit {}!", ShipFullName(ship)),
+                    ShotOutcome::Sunk(ship) => println!("Sunk {}!", ShipFullName(ship)),
+                    ShotOutcome::Victory(ship) => {
+                        println!("Sunk {}!", ShipFullName(ship));
+                        println!("Last enemy ship sunk! VICTORY!");
+                    }
+                }
+                thread::sleep(Duration::from_secs(2));
+                break;
+            }
+            // Method never called when game is over.
+            Err(CannotShootReason::AlreadyOver) => unreachable!(),
+            // Bounds checked during input.
+            Err(CannotShootReason::OutOfBounds) => unreachable!(),
+            // Never called on bot turn.
+            Err(CannotShootReason::OutOfTurn) => unreachable!(),
+            Err(CannotShootReason::AlreadyShot) => {
+                println!("That position is already shot, choose a different target.")
+            }
+        }
+    }
+    Ok(())
+}
+
+fn bot_turn(rng: &mut impl Rng, game: &mut Game, bot: Player) {
+    println!();
+    println!("Bot's turn.");
+    show_status(game, bot.opponent());
+    thread::sleep(Duration::from_secs(1));
+    println!("Bot choosing target to attack.");
+    thread::sleep(Duration::from_secs(1));
+    loop {
+        let target = rng.sample(&*COORD_RANGE);
+        match game.shoot(bot.opponent(), target) {
+            Ok(outcome) => {
+                println!("Bot shoots {},{}", target.x, target.y);
+                thread::sleep(Duration::from_secs(1));
+                match outcome {
+                    ShotOutcome::Miss => println!("Bot missed."),
+                    ShotOutcome::Hit(ship) => println!("Bot hit your {}!", ShipFullName(ship)),
+                    ShotOutcome::Sunk(ship) => println!("Bot sunk your {}!", ShipFullName(ship)),
+                    ShotOutcome::Victory(ship) => {
+                        println!("Bot sunk your {}!", ShipFullName(ship));
+                        println!("All your ships have been sunk! Bot Wins!");
+                    }
+                }
+                thread::sleep(Duration::from_secs(2));
+                break;
+            }
+            Err(CannotShootReason::AlreadyShot) => continue,
+            Err(_) => unreachable!(),
         }
     }
 }
@@ -281,6 +377,14 @@ fn show_setup_board(setup: &GameSetup, player: Player) {
             None => SetupCell::Empty,
         })
     }))
+}
+
+fn show_status(game: &Game, player: Player) {
+    println!("Bot's Board:");
+    show_obfuscated_board(game, player.opponent());
+    println!();
+    println!("Your Board:");
+    show_revealed_board(game, player);
 }
 
 /// Print out the fully-revealed board for the given player.
@@ -448,6 +552,7 @@ impl<B: BufRead> InputReader<B> {
     }
 
     /// Repeatedly tries to read input until the input checker returns `Some`.
+    #[allow(unused)]
     fn read_input<F, T>(&mut self, prompt: &str, mut checker: F) -> io::Result<T>
     where
         F: FnMut(&str) -> Option<T>,
