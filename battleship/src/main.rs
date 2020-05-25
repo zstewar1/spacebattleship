@@ -57,7 +57,7 @@ fn main() -> io::Result<()> {
         }
     }
 
-    show_status(&gmae, player);
+    show_status(&game, player);
 
     Ok(())
 }
