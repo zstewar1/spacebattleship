@@ -1,9 +1,22 @@
+// Copyright 2020 Zachary Stewart
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::{
     fmt,
     io::{self, BufRead, Write},
-    str,
+    str, thread,
     time::Duration,
-    thread,
 };
 
 use clap::{App, Arg, ArgMatches};
@@ -12,8 +25,8 @@ use rand::{distributions::Uniform, Rng};
 use regex::Regex;
 
 use spacebattleship::game::simple::{
-    ShotOutcome, CannotShootReason,
-    CannotPlaceReason, Coordinate, Game, GameSetup, Orientation, Player, Ship,
+    CannotPlaceReason, CannotShootReason, Coordinate, Game, GameSetup, Orientation, Player, Ship,
+    ShotOutcome,
 };
 
 /// Range of valid coordinates for the standard 10x10 game.
@@ -227,8 +240,8 @@ fn choose_placements(
         See below for possible ship. Additionally \"all\" may be specified to clear all placements.
     clear                       clears all ship placements.
     randomize                   randomize the placements of the remaining ships.
-    
-Available Ships: 
+
+Available Ships:
     \"carrier\" (\"cv\")
     \"battleship\" (\"bb\")
     \"cruiser\" (\"cl\")
@@ -241,7 +254,7 @@ Available Ships:
     Ok(())
 }
 
-/// Read a single coordinate from a string. `name` is either 'x' or 'y' for the error 
+/// Read a single coordinate from a string. `name` is either 'x' or 'y' for the error
 /// message if the coordinate is invalid.
 fn read_coord(src: &str, name: &str) -> Option<usize> {
     match src.parse() {
@@ -272,28 +285,33 @@ fn choose_random_placements(rng: &mut impl Rng, setup: &mut GameSetup, player: P
 }
 
 /// Handles the input for a player's turn.
-fn player_turn(input: &mut InputReader<impl BufRead>, game: &mut Game, player: Player) -> io::Result<()> {
+fn player_turn(
+    input: &mut InputReader<impl BufRead>,
+    game: &mut Game,
+    player: Player,
+) -> io::Result<()> {
     println!();
     println!("Your Turn!");
     show_status(game, player);
     println!();
     println!("Choose coordinates to attack.");
     loop {
-        static COORD: Lazy<Regex> = Lazy::new(|| 
-            Regex::new(r"^(?P<x>[0-9]+)(?:\s*,\s*|\s+)(?P<y>[0-9]+)$").unwrap()
-        );
+        static COORD: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"^(?P<x>[0-9]+)(?:\s*,\s*|\s+)(?P<y>[0-9]+)$").unwrap());
         let target = input.read_input_lower("> ", |input| match input {
             "help" | "?" => {
                 println!("Enter an x,y coordinate pair to attack.");
                 None
             }
-            other => if let Some(captures) = COORD.captures(other) {
-                let x = read_coord(captures.name("x").unwrap().as_str(), "x")?;
-                let y = read_coord(captures.name("y").unwrap().as_str(), "y")?;
-                Some(Coordinate::new(x, y))
-            } else {
-                println!("Invalid coordinates: {}", other);
-                None
+            other => {
+                if let Some(captures) = COORD.captures(other) {
+                    let x = read_coord(captures.name("x").unwrap().as_str(), "x")?;
+                    let y = read_coord(captures.name("y").unwrap().as_str(), "y")?;
+                    Some(Coordinate::new(x, y))
+                } else {
+                    println!("Invalid coordinates: {}", other);
+                    None
+                }
             }
         })?;
         match game.shoot(player.opponent(), target) {
