@@ -18,6 +18,14 @@ version = "0.1.0"
 authors = ["Zachary Stewart <zachary@zstewart.com>"]
 edition = "2018"
 
+description = "Implementation of the classic game Battleship with support for arbitrary dimensions and spaces through generics."
+documentation = "https://docs.rs/spacebattleship"
+homepage = "https://github.com/zstewar1/spacebattleship"
+readme = "../README.md"
+repository = "https://github.com/zstewar1/spacebattleship"
+license = "Apache-2.0"
+keywords = ["battleship"]
+
 [features]
 rng_gen = ["rand", "once_cell"]
 
